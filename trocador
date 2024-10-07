@@ -1,0 +1,158 @@
+/**
+ * Prepaid Card Purchase App - Trocador
+ * 
+ * This app demonstrates how to integrate a prepaid card purchasing system within the Intersend platform.
+ * It showcases:
+ * 1. How to fetch and display available prepaid card offers
+ * 2. How to create and confirm transactions for purchasing prepaid cards
+ * 3. How to handle the transaction flow using Intersend's API
+ * 4. How to display transaction history and other relevant information
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It uses Intersend's API for authentication, fetching offers, and processing transactions
+ * - The app uses generalized endpoints that can be applied to various types of applications
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const PrepaidCardApp = () => {
+  const [offers, setOffers] = useState([]);
+  const [selectedAmount, setSelectedAmount] = useState('');
+  const [email, setEmail] = useState('');
+  const [transactionData, setTransactionData] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [authToken, setAuthToken] = useState(null);
+
+  useEffect(() => {
+    initializeApp();
+    fetchOffers();
+    fetchTransactionHistory();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/initialize', {
+        appId: process.env.REACT_APP_PREPAID_CARD_APP_ID
+      });
+      setAuthToken(response.data.token);
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+    }
+  };
+
+  const fetchOffers = async () => {
+    try {
+      const response = await axios.get('https://node.intersend.io/app/offers', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setOffers(response.data);
+    } catch (error) {
+      console.error('Error fetching offers:', error);
+      setErrorMessage('Failed to fetch offers. Please try again later.');
+    }
+  };
+
+  const fetchTransactionHistory = async () => {
+    try {
+      const response = await axios.get('https://node.intersend.io/app/transactions', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setTransactions(response.data);
+    } catch (error) {
+      console.error('Error fetching transaction history:', error);
+    }
+  };
+
+  const createTransaction = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const response = await axios.post('https://node.intersend.io/app/transaction/create', {
+        amount: selectedAmount,
+        email: email,
+        type: 'prepaid_card_purchase'
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setTransactionData(response.data);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      setErrorMessage('Failed to create transaction. Please try again.');
+      setIsLoading(false);
+    }
+  };
+
+  const confirmTransaction = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const response = await axios.post('https://node.intersend.io/app/transaction/confirm', {
+        transactionId: transactionData.id
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      // Handle successful transaction
+      fetchTransactionHistory(); // Refresh transaction history
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error confirming transaction:', error);
+      setErrorMessage('Failed to confirm transaction. Please try again.');
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Buy Prepaid Card</h1>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Enter your email"
+      />
+      <select
+        value={selectedAmount}
+        onChange={(e) => setSelectedAmount(e.target.value)}
+      >
+        <option value="">Select amount</option>
+        {offers.map((offer, index) => (
+          <option key={index} value={offer.amount}>
+            {offer.amount} USD
+          </option>
+        ))}
+      </select>
+      <button onClick={createTransaction} disabled={isLoading}>
+        {isLoading ? 'Processing...' : 'Buy Card'}
+      </button>
+      {errorMessage && <p>{errorMessage}</p>}
+      {transactionData && (
+        <div>
+          <h2>Confirm Your Purchase</h2>
+          <p>Card Value: ${transactionData.cardValue}</p>
+          <p>Amount to Pay: ${transactionData.amountToPay}</p>
+          <button onClick={confirmTransaction} disabled={isLoading}>
+            Confirm Purchase
+          </button>
+        </div>
+      )}
+      <h2>Previous Purchases</h2>
+      {transactions.map((transaction, index) => (
+        <div key={index}>
+          <p>Date: {transaction.date}</p>
+          <p>Amount: ${transaction.amount}</p>
+          <p>Status: {transaction.status}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default PrepaidCardApp;
