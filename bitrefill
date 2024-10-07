@@ -1,0 +1,130 @@
+/**
+ * Gift Card Purchase App
+ * 
+ * This app demonstrates how to integrate a gift card purchasing system within the Intersend platform.
+ * It showcases:
+ * 1. How to embed a third-party widget for gift card selection
+ * 2. How to handle purchase intents and process payments
+ * 3. How to update transaction statuses
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It embeds a third-party widget for gift card selection
+ * - It uses Intersend's API for authentication and transaction processing
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const GiftCardPurchaseApp = () => {
+  const [isWidgetLoaded, setIsWidgetLoaded] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [authToken, setAuthToken] = useState(null);
+
+  useEffect(() => {
+    initializeApp();
+    fetchBalance();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/initialize', {
+        appId: process.env.REACT_APP_GIFT_CARD_APP_ID
+      });
+      setAuthToken(response.data.token);
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+    }
+  };
+
+  const fetchBalance = async () => {
+    try {
+      const response = await axios.get('https://node.intersend.io/app/balance', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setBalance(response.data.balance);
+    } catch (error) {
+      console.error('Error fetching balance:', error);
+    }
+  };
+
+  const handleMessage = async (event) => {
+    if (event.origin !== 'https://bitrefill.com/') return;
+
+    const data = JSON.parse(event.data);
+
+    switch (data.event) {
+      case 'payment_intent':
+        await handlePaymentIntent(data);
+        break;
+      case 'invoice_update':
+        await updateInvoiceStatus(data);
+        break;
+      case 'invoice_complete':
+        await completeInvoice(data);
+        break;
+      default:
+        console.log('Unknown event:', data.event);
+    }
+  };
+
+  const handlePaymentIntent = async (data) => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/purchase', {
+        invoiceId: data.invoiceId,
+        amount: data.paymentAmount,
+        currency: data.paymentCurrency,
+        recipientAddress: data.paymentAddress
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      console.log('Purchase successful:', response.data);
+    } catch (error) {
+      console.error('Error processing purchase:', error);
+    }
+  };
+
+  const updateInvoiceStatus = async (data) => {
+    try {
+      await axios.post('https://node.intersend.io/app/update-status', {
+        invoiceId: data.invoiceId,
+        status: data.status
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+    }
+  };
+
+  const completeInvoice = async (data) => {
+    try {
+      await axios.post('https://node.intersend.io/app/complete', {
+        invoiceId: data.invoiceId,
+        status: data.status
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+    } catch (error) {
+      console.error('Error completing invoice:', error);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Gift Card Purchase</h1>
+      <p>Your Balance: ${balance}</p>
+      <iframe
+        src="https://bitrefill.com/"
+        onLoad={() => setIsWidgetLoaded(true)}
+        style={{ width: '100%', height: '600px', border: 'none' }}
+      />
+      {!isWidgetLoaded && <p>Loading gift card options...</p>}
+    </div>
+  );
+};
+
+export default GiftCardPurchaseApp;
