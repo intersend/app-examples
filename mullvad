@@ -1,0 +1,116 @@
+/**
+ * Mulvad VPN Payment Integration Example
+ * 
+ * This app demonstrates how to integrate Mulvad VPN payments within the Intersend platform.
+ * It showcases:
+ * 1. How to fetch and display subscription options
+ * 2. How to generate a new Mulvad account
+ * 3. How to process a payment for a Mulvad subscription
+ * 4. How to handle the transaction flow using Intersend's API
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It uses Intersend's API for authentication and transaction processing
+ * - It interacts with Mulvad's API through Intersend's backend
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const MulvadPaymentApp = () => {
+  const [accountNumber, setAccountNumber] = useState('');
+  const [subscriptionPeriods, setSubscriptionPeriods] = useState({});
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [usdtAmount, setUsdtAmount] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+
+  useEffect(() => {
+    initializeApp();
+    fetchSubscriptionPeriods();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/initialize', {
+        appId: process.env.REACT_APP_MULVAD_APP_ID
+      });
+      setAuthToken(response.data.token);
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+    }
+  };
+
+  const fetchSubscriptionPeriods = async () => {
+    try {
+      const result = await axios.get('https://node.intersend.io/app/mulvad/subscription-periods', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setSubscriptionPeriods(result.data);
+    } catch (error) {
+      console.error('Error fetching subscription periods:', error);
+    }
+  };
+
+  const generateMulvadAccount = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/mulvad/generate-account', {}, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setAccountNumber(response.data.accountNumber);
+    } catch (error) {
+      console.error('Error generating Mulvad account:', error);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    setPaymentStatus(null);
+    try {
+      const response = await axios.post('https://node.intersend.io/app/mulvad/process-payment', {
+        accountNumber,
+        period: selectedPeriod,
+        amount: usdtAmount
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setPaymentStatus('success');
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setPaymentStatus('failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Mulvad VPN Payment</h1>
+      <input
+        type="text"
+        placeholder="Mulvad Account Number"
+        value={accountNumber}
+        onChange={(e) => setAccountNumber(e.target.value)}
+      />
+      <button onClick={generateMulvadAccount}>Generate New Account</button>
+      <select onChange={(e) => setSelectedPeriod(e.target.value)}>
+        <option value="">Select Subscription Period</option>
+        {Object.entries(subscriptionPeriods).map(([period, price]) => (
+          <option key={period} value={period}>{`${period} month(s) - ${price} USDT`}</option>
+        ))}
+      </select>
+      <button onClick={handleSubmit} disabled={isLoading}>
+        {isLoading ? 'Processing...' : 'Pay Now'}
+      </button>
+      {paymentStatus && (
+        <p>{paymentStatus === 'success' ? 'Payment successful!' : 'Payment failed. Please try again.'}</p>
+      )}
+    </div>
+  );
+};
+
+export default MulvadPaymentApp;
