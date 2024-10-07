@@ -1,0 +1,64 @@
+// app-examples/revoke-cash/index.js
+
+/**
+ * Revoke.cash Integration Example
+ * 
+ * This app demonstrates how to integrate Revoke.cash within the Intersend platform.
+ * It showcases:
+ * 1. How to initialize the app and get the user's address
+ * 2. How to embed Revoke.cash in an iframe
+ * 3. How to handle communication between the app and the Intersend platform
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It embeds Revoke.cash in an iframe
+ * - It uses Intersend's API to get the user's address
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const RevokeCashApp = () => {
+  const [userAddress, setUserAddress] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+
+  // Initialize the app and get the auth token
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        const response = await axios.post('https://node.intersend.io/app/initialize', {
+          appId: process.env.REACT_APP_REVOKE_CASH_APP_ID
+        });
+        setAuthToken(response.data.token);
+        
+        // Get user's address
+        const addressResponse = await axios.get('https://node.intersend.io/app/user/address', {
+          headers: { Authorization: `Bearer ${response.data.token}` }
+        });
+        setUserAddress(addressResponse.data.address);
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  // Construct the Revoke.cash URL
+  const revokeCashUrl = userAddress
+    ? `https://revoke.cash/address/${userAddress}?chainId=137`
+    : 'https://revoke.cash';
+
+  return (
+    <iframe
+      src={revokeCashUrl}
+      style={{ width: '100%', height: '85vh', border: 'none' }}
+      title="Revoke.cash"
+    />
+  );
+};
+
+export default RevokeCashApp;
