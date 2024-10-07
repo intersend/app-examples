@@ -1,0 +1,176 @@
+/**
+ * Smol  DApps - Token Transfer Example
+ * 
+ * This app demonstrates how to integrate a token transfer functionality
+ * within the Intersend platform. It showcases:
+ * 1. How to set up communication between your app and the Intersend platform
+ * 2. How to prepare and send transaction requests
+ * 3. How to handle transaction responses
+ * 
+ * Architecture Overview:
+ * - The app runs within an iframe in the Intersend platform
+ * - It uses postMessage API for communication with the parent window
+ * - Transaction requests are sent to Intersend's backend for processing
+ * - The app receives and handles transaction results
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { parseEther, encodeFunctionData } from 'viem';
+
+const SmoldApp = () => {
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [transactionStatus, setTransactionStatus] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+
+  // Initialize the app and get the auth token
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        const response = await axios.post('https://node.intersend.io/app/initialize', {
+          appId: process.env.REACT_APP_SMOLD_APP_ID
+        });
+        setAuthToken(response.data.token);
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  // Listen for messages from the parent window
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Ensure the message is from the trusted parent origin
+      if (event.origin !== process.env.REACT_APP_PARENT_ORIGIN) return;
+
+      const { id, result } = event.data;
+      if (result.success) {
+        setTransactionStatus('Success');
+        console.log('Transaction successful:', result.data);
+      } else {
+        setTransactionStatus('Failed');
+        console.error('Transaction failed:', result.message);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Function to prepare transaction data
+  const prepareTransactionData = (to, amount) => {
+    // Encode the function call for a token transfer
+    return encodeFunctionData({
+      abi: [{
+        inputs: [
+          { name: 'recipient', type: 'address' },
+          { name: 'amount', type: 'uint256' }
+        ],
+        name: 'transfer',
+        type: 'function'
+      }],
+      args: [to, parseEther(amount)]
+    });
+  };
+
+  // Function to send transaction request
+  const sendTransaction = async () => {
+    if (!authToken) {
+      console.error('App not initialized');
+      return;
+    }
+
+    setTransactionStatus('Pending');
+
+    const data = prepareTransactionData(recipient, amount);
+
+    try {
+      const response = await axios.post(
+        'https://node.intersend.io/app/transaction/send',
+        {
+          to: recipient,
+          value: amount,
+          data: data,
+        },
+        {
+          headers: { Authorization: `Bearer ${authToken}` }
+        }
+      );
+
+      // Send the result back to the parent window
+      window.parent.postMessage({
+        id: `tx-${Date.now()}`,
+        result: {
+          success: true,
+          data: response.data,
+          message: 'Transaction sent successfully'
+        }
+      }, process.env.REACT_APP_PARENT_ORIGIN);
+
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      setTransactionStatus('Failed');
+
+      // Notify the parent window of the failure
+      window.parent.postMessage({
+        id: `tx-${Date.now()}`,
+        result: {
+          success: false,
+          error: 'Transaction failed',
+          message: error.message || 'An error occurred while processing the transaction'
+        }
+      }, process.env.REACT_APP_PARENT_ORIGIN);
+    }
+  };
+
+  // The actual content of the iframe
+  const iframeContent = (
+    <div>
+      <input 
+        type="text" 
+        placeholder="Recipient Address" 
+        value={recipient} 
+        onChange={(e) => setRecipient(e.target.value)} 
+      />
+      <input 
+        type="text" 
+        placeholder="Amount" 
+        value={amount} 
+        onChange={(e) => setAmount(e.target.value)} 
+      />
+      <button onClick={sendTransaction} disabled={!authToken}>
+        Send Transaction
+      </button>
+      {transactionStatus && <p>Transaction Status: {transactionStatus}</p>}
+    </div>
+  );
+
+  // Return the iframe
+  return (
+    <iframe
+      srcDoc={`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Smold App</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script>
+              ${iframeContent}
+            </script>
+          </body>
+        </html>
+      `}
+      style={{ width: '100%', height: '100%', border: 'none' }}
+    />
+  );
+};
+
+export default SmoldApp;
