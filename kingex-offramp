@@ -1,0 +1,149 @@
+/**
+ * Offramp App - Kingex
+ * 
+ * This app demonstrates how to integrate a crypto-to-fiat offramp solution within the Intersend platform.
+ * It showcases:
+ * 1. How to fetch and display available fiat currency options
+ * 2. How to handle user input for transaction details
+ * 3. How to create and confirm fiat withdrawal transactions
+ * 4. How to handle the transaction flow using Intersend's API
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It uses Intersend's API for authentication, fetching options, and processing transactions
+ * - The app demonstrates a simple flow for converting crypto to fiat and withdrawing to a bank account
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const OfframpApp = () => {
+  const [options, setOptions] = useState([]);
+  const [selectedCurrency, setSelectedCurrency] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [rate, setRate] = useState(null);
+  const [bankDetails, setBankDetails] = useState({});
+  const [transactionStatus, setTransactionStatus] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+
+  useEffect(() => {
+    initializeApp();
+    fetchOptions();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/initialize', {
+        appId: process.env.REACT_APP_OFFRAMP_APP_ID
+      });
+      setAuthToken(response.data.token);
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+    }
+  };
+
+  const fetchOptions = async () => {
+    try {
+      const response = await axios.get('https://node.intersend.io/app/offramp/options', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setOptions(response.data);
+    } catch (error) {
+      console.error('Error fetching options:', error);
+    }
+  };
+
+  const handleCurrencyChange = (event) => {
+    const selected = options.find(option => option.currency === event.target.value);
+    setSelectedCurrency(selected);
+    setRate(null);
+  };
+
+  const handleAmountChange = (event) => {
+    setAmount(event.target.value);
+    fetchRate(event.target.value);
+  };
+
+  const fetchRate = async (amount) => {
+    if (!selectedCurrency || !amount) return;
+
+    setIsLoading(true);
+    try {
+      const response = await axios.post('https://node.intersend.io/app/offramp/rate', {
+        fromCurrency: 'USDT',
+        toCurrency: selectedCurrency.currency,
+        amount: amount
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setRate(response.data);
+    } catch (error) {
+      console.error('Error fetching rate:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTransaction = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.post('https://node.intersend.io/app/offramp/withdraw', {
+        currency: selectedCurrency.currency,
+        amount: amount,
+        bankDetails: bankDetails
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setTransactionStatus('success');
+    } catch (error) {
+      console.error('Error processing withdrawal:', error);
+      setTransactionStatus('failure');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Crypto to Fiat Withdrawal</h1>
+      <select onChange={handleCurrencyChange}>
+        <option value="">Select Currency</option>
+        {options.map(option => (
+          <option key={option.currency} value={option.currency}>{option.name}</option>
+        ))}
+      </select>
+      <input
+        type="number"
+        value={amount}
+        onChange={handleAmountChange}
+        placeholder="Enter amount"
+      />
+      {selectedCurrency && selectedCurrency.fields.map(field => (
+        <input
+          key={field.name}
+          type="text"
+          placeholder={field.name}
+          onChange={(e) => setBankDetails({...bankDetails, [field.name]: e.target.value})}
+        />
+      ))}
+      {rate && (
+        <div>
+          <p>You will receive: {rate.receivedAmount} {selectedCurrency.currency}</p>
+          <p>Exchange rate: 1 USDT = {rate.exchangeRate} {selectedCurrency.currency}</p>
+        </div>
+      )}
+      <button onClick={handleTransaction} disabled={isLoading || !rate}>
+        {isLoading ? 'Processing...' : 'Withdraw'}
+      </button>
+      {transactionStatus && (
+        <p>{transactionStatus === 'success' ? 'Transaction Successful!' : 'Transaction Failed'}</p>
+      )}
+    </div>
+  );
+};
+
+export default OfframpApp;
