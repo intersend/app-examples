@@ -2,15 +2,7 @@
 
 Welcome to the Intersend App Examples repository! This collection of sample applications demonstrates how to build and integrate various functionalities using the Intersend platform.
 
-## 🚀 Quick Start
 
-To get started with these examples:
-
-1. Clone this repository
-2. Navigate to the specific app directory you're interested in
-3. Install dependencies with `npm install` or `yarn install`
-4. Set up your environment variables (see each app's README for specific requirements)
-5. Run the app with `npm start` or `yarn start`
 
 ## 📚 Full Documentation
 
