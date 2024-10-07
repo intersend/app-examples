@@ -1,0 +1,124 @@
+/**
+ * Wise Withdrawal App
+ * 
+ * This app demonstrates how to integrate a Wise withdrawal functionality within the Intersend platform.
+ * It showcases:
+ * 1. How to fetch and display withdrawal options
+ * 2. How to handle user input for withdrawal details
+ * 3. How to fetch and display exchange rates
+ * 4. How to process a withdrawal transaction
+ * 
+ * Architecture Overview:
+ * - The app runs within the Intersend platform
+ * - It uses Intersend's API for authentication, fetching options, and processing transactions
+ * - The app demonstrates a simple flow for withdrawing funds to a Wise account
+ * 
+ * Note: This example uses environment variables for sensitive data.
+ * Ensure you have set up your .env file with the necessary values.
+ */
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const WiseWithdrawalApp = () => {
+  const [amount, setAmount] = useState('');
+  const [email, setEmail] = useState('');
+  const [rate, setRate] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [transactionStatus, setTransactionStatus] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [authToken, setAuthToken] = useState(null);
+
+  useEffect(() => {
+    initializeApp();
+  }, []);
+
+  useEffect(() => {
+    if (amount && parseFloat(amount) >= 520 && parseFloat(amount) <= 250000) {
+      fetchRate();
+    } else {
+      setErrorMessage('Min: $520, Max: $250K');
+      setRate(null);
+    }
+  }, [amount]);
+
+  const initializeApp = async () => {
+    try {
+      const response = await axios.post('https://node.intersend.io/app/initialize', {
+        appId: process.env.REACT_APP_WISE_WITHDRAWAL_APP_ID
+      });
+      setAuthToken(response.data.token);
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+    }
+  };
+
+  const fetchRate = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.post('https://node.intersend.io/app/wise/rate', {
+        amount: amount
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setRate(response.data);
+      setErrorMessage('');
+    } catch (error) {
+      console.error('Error fetching rate:', error);
+      setErrorMessage('Failed to fetch rate. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWithdrawal = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.post('https://node.intersend.io/app/wise/withdraw', {
+        amount: amount,
+        email: email
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setTransactionStatus('success');
+    } catch (error) {
+      console.error('Error processing withdrawal:', error);
+      setTransactionStatus('failure');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Wise Withdrawal</h1>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Enter your Wise email"
+      />
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="Enter amount (USD)"
+      />
+      {errorMessage && <p>{errorMessage}</p>}
+      {rate && (
+        <div>
+          <p>Exchange Rate: 1 USD = {rate.rate} EUR</p>
+          <p>You will receive: {rate.amountToReceive} EUR</p>
+        </div>
+      )}
+      <button onClick={handleWithdrawal} disabled={isLoading || !rate}>
+        {isLoading ? 'Processing...' : 'Withdraw to Wise'}
+      </button>
+      {transactionStatus && (
+        <p>{transactionStatus === 'success' ? 'Withdrawal successful!' : 'Withdrawal failed. Please try again.'}</p>
+      )}
+    </div>
+  );
+};
+
+export default WiseWithdrawalApp;
