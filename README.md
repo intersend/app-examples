@@ -54,5 +54,5 @@ If you encounter any issues or have questions, please:
 
 1. Check the [official documentation](https://intersend.mintlify.app/overview)
 2. Open an issue in this repository
-3. Contact our support team at hey@intersend.io
+3. Contact our support team at hello@intersend.io
 4. Contact @erturkarda on telegram
